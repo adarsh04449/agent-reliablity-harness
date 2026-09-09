@@ -1,0 +1,76 @@
+task_id: flight_booking_sfo_jfk
+instruction: >
+  Book a one-way flight from SFO to JFK on 2026-10-15 for Alice Chen.
+  Prefer a morning departure. Do not spend more than $400.
+origin: SFO
+destination: JFK
+date: "2026-10-15"
+passenger_name: Alice Chen
+constraints:
+  time_of_day: morning
+  max_price: 400
+gold_flight_id: UA100
+flights:
+  # Gold: morning and under $400. Only this id is success.
+  - id: UA100
+    origin: SFO
+    destination: JFK
+    date: "2026-10-15"
+    depart: "08:15"
+    time_of_day: morning
+    price: 349
+    gold: true
+  # Morning but over budget.
+  - id: B6200
+    origin: SFO
+    destination: JFK
+    date: "2026-10-15"
+    depart: "07:50"
+    time_of_day: morning
+    price: 499
+    gold: false
+  # Cheap but evening.
+  - id: UA900
+    origin: SFO
+    destination: JFK
+    date: "2026-10-15"
+    depart: "19:40"
+    time_of_day: evening
+    price: 199
+    gold: false
+  # Morning, $1 over the cap.
+  - id: UA150
+    origin: SFO
+    destination: JFK
+    date: "2026-10-15"
+    depart: "09:05"
+    time_of_day: morning
+    price: 401
+    gold: false
+  # Also morning and under $400 — not gold (agent must pick UA100).
+  - id: DL220
+    origin: SFO
+    destination: JFK
+    date: "2026-10-15"
+    depart: "11:55"
+    time_of_day: morning
+    price: 379
+    gold: false
+  # Wrong date; only appears if search uses 2026-10-16.
+  - id: UA101
+    origin: SFO
+    destination: JFK
+    date: "2026-10-16"
+    depart: "08:00"
+    time_of_day: morning
+    price: 329
+    gold: false
+  # Wrong destination; only appears if search uses LAX.
+  - id: UA300
+    origin: SFO
+    destination: LAX
+    date: "2026-10-15"
+    depart: "07:30"
+    time_of_day: morning
+    price: 199
+    gold: false

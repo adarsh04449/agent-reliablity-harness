@@ -11,7 +11,8 @@ Working copy of the scaffold plan. Source of truth for what we build this pass v
 ## Build checklist
 
 - [x] Folders, `__init__.py`, `.gitignore`, `.env.example`, `requirements.txt`, `results/` gitkeeps
-- [ ] Mock tools, LangGraph, OpenAI + mock LLM, flight-booking YAML, post-run “how sure are you 0–1?” node
+- [x] In-memory catalog, search/book tools, gold vs distractor, flight-booking YAML (no LLM yet)
+- [ ] LangGraph, OpenAI + mock LLM, post-run “how sure are you 0–1?” node
 - [ ] Template paraphrases; latency / partial-failure wrappers
 - [ ] Checkpoint/rollback after successful search; retry `book_flight` from snapshot
 - [ ] Config, asyncio trial runner, JSONL/CSV logging, `TrialResult`

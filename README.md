@@ -30,6 +30,16 @@ cp .env.example .env
 # put OPENAI_API_KEY in .env
 ```
 
+## Verify the catalog (no LLM)
+
+From the repo root:
+
+```bash
+python -m agent.catalog
+```
+
+Correct-date SFO→JFK search should list `UA100` (gold, morning $349), `B6200` (morning $499), `UA900` (evening $199), `UA150` (morning $401), `DL220` (morning $379, not gold). Wrong-date search is `UA101`; SFO→LAX is `UA300`. Booking `UA100` is success; booking any other catalog id (including `DL220`) is `wrong_booking`.
+
 ## How to run (once the suite exists)
 
 **Real agent (the experiment):**
