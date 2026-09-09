@@ -40,6 +40,14 @@ python -m agent.catalog
 
 Correct-date SFO→JFK search should list `UA100` (gold, morning $349), `B6200` (morning $499), `UA900` (evening $199), `UA150` (morning $401), `DL220` (morning $379, not gold). Wrong-date search is `UA101`; SFO→LAX is `UA300`. Booking `UA100` is success; booking any other catalog id (including `DL220`) is `wrong_booking`.
 
+## One real agent run (needs API key)
+
+```bash
+python -m agent.graph
+```
+
+Prints success, outcome, booked id, and post-run confidence. Uses `gpt-4o-mini` at temperature 0.
+
 ## How to run (once the suite exists)
 
 **Real agent (the experiment):**
@@ -48,17 +56,9 @@ Correct-date SFO→JFK search should list `UA100` (gold, morning $349), `B6200` 
 python -m experiments.run_suite --k 3
 ```
 
-Requires `OPENAI_API_KEY`. This is the path you would cite.
+Requires `OPENAI_API_KEY` in `.env`. There is no fake LLM.
 
-**Wiring check only (not a reliability result):**
-
-```bash
-python -m experiments.run_suite --mock --k 2
-```
-
-Uses a deterministic fake LLM so you can test logging and metrics without API calls.
-
-`run_suite` is not implemented yet (build step 1 is folders only).
+`run_suite` is not implemented yet.
 
 ## Four core metrics
 
