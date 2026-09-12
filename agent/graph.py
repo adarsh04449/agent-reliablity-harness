@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import random
 import re
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
@@ -14,6 +15,7 @@ from agent.catalog import load_task
 from agent.llm import get_chat_model
 from agent.state import AgentState
 from agent.tools import BOOKING_TOOLS, get_airline
+from perturbation.wrappers import wrap_booking_tools
 
 MAX_AGENT_STEPS = 8
 CONFIDENCE_PROMPT = (
@@ -39,9 +41,20 @@ def parse_confidence(text: str) -> float:
     return float(match.group(1))
 
 
-def build_graph(*, model: str | None = None):
+def build_graph(
+    *,
+    model: str | None = None,
+    tools: Sequence[Any] | None = None,
+    delay_s: float = 0.0,
+    p_fault: float = 0.0,
+    rng: random.Random | None = None,
+    events: list[dict[str, Any]] | None = None,
+):
+    booking_tools = _booking_tools(
+        tools=tools, delay_s=delay_s, p_fault=p_fault, rng=rng, events=events
+    )
     llm = get_chat_model(model=model)
-    llm_with_tools = llm.bind_tools(BOOKING_TOOLS)
+    llm_with_tools = llm.bind_tools(booking_tools)
 
     def agent(state: AgentState) -> dict[str, Any]:
         messages = list(state["messages"])
@@ -58,7 +71,7 @@ def build_graph(*, model: str | None = None):
         text = reply.content if isinstance(reply.content, str) else str(reply.content)
         booked_id, last_ok = _last_booking(state["messages"])
         airline = get_airline()
-        return {
+        result: dict[str, Any] = {
             "messages": [reply],
             "confidence": parse_confidence(text),
             "booked_flight_id": booked_id,
@@ -66,22 +79,41 @@ def build_graph(*, model: str | None = None):
             "success": airline.is_success(booked_id),
             "outcome": airline.outcome(booked_id),
         }
+        if events is not None:
+            result["tool_events"] = list(events)
+        return result
 
     graph = StateGraph(AgentState)
     graph.add_node("agent", agent)
-    graph.add_node("tools", ToolNode(BOOKING_TOOLS))
+    graph.add_node("tools", ToolNode(booking_tools))
     graph.add_node("confidence", confidence)
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", _route_agent, {"tools": "tools", "confidence": "confidence"})
-    graph.add_edge("tools", "agent")
+    graph.add_conditional_edges("tools", _route_after_tools, {"agent": "agent", "confidence": "confidence"})
     graph.add_edge("confidence", END)
     return graph.compile()
 
 
-def run_booking(instruction: str | None = None, *, model: str | None = None) -> AgentState:
+def run_booking(
+    instruction: str | None = None,
+    *,
+    model: str | None = None,
+    tools: Sequence[Any] | None = None,
+    delay_s: float = 0.0,
+    p_fault: float = 0.0,
+    rng: random.Random | None = None,
+    events: list[dict[str, Any]] | None = None,
+) -> AgentState:
     task = load_task()
     text = instruction if instruction is not None else task["instruction"].strip()
-    graph = build_graph(model=model)
+    graph = build_graph(
+        model=model,
+        tools=tools,
+        delay_s=delay_s,
+        p_fault=p_fault,
+        rng=rng,
+        events=events,
+    )
     return graph.invoke(
         {
             "instruction": text,
@@ -89,19 +121,40 @@ def run_booking(instruction: str | None = None, *, model: str | None = None) -> 
                 SystemMessage(content=SYSTEM_PROMPT),
                 HumanMessage(content=text),
             ],
-            "tool_events": [],
+            "tool_events": events if events is not None else [],
         },
         config={"recursion_limit": MAX_AGENT_STEPS * 2 + 4},
     )
 
 
+def _booking_tools(
+    *,
+    tools: Sequence[Any] | None,
+    delay_s: float,
+    p_fault: float,
+    rng: random.Random | None,
+    events: list[dict[str, Any]] | None,
+) -> list[Any]:
+    if tools is not None:
+        return list(tools)
+    if delay_s > 0 or p_fault > 0 or events is not None:
+        return wrap_booking_tools(delay_s=delay_s, p_fault=p_fault, rng=rng, events=events)
+    return list(BOOKING_TOOLS)
+
+
 def _route_agent(state: AgentState) -> Literal["tools", "confidence"]:
     last = state["messages"][-1]
     tool_calls = getattr(last, "tool_calls", None) or []
-    agent_steps = sum(1 for m in state["messages"] if isinstance(m, AIMessage))
-    if tool_calls and agent_steps < MAX_AGENT_STEPS:
+    if tool_calls:
         return "tools"
     return "confidence"
+
+
+def _route_after_tools(state: AgentState) -> Literal["agent", "confidence"]:
+    agent_steps = sum(1 for m in state["messages"] if isinstance(m, AIMessage))
+    if agent_steps >= MAX_AGENT_STEPS:
+        return "confidence"
+    return "agent"
 
 
 def _last_booking(messages: list[BaseMessage]) -> tuple[str | None, bool]:
