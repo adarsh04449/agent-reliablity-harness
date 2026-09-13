@@ -14,7 +14,8 @@ Inspired by [Towards a Science of AI Agent Reliability](https://arxiv.org/abs/26
 | `metrics/` | Consistency, robustness, predictability, bounded severity |
 | `mitigation/` | Checkpoint / rollback |
 | `experiments/` | Suite entrypoint (`run_suite`) |
-| `tasks/` | Task YAML (flight booking) |
+| `tasks/` | Task YAML (flight booking goal + gold id) |
+| `store/` | SQLite schema + seed (airports, flights, reservations) |
 | `results/` | `logs/`, `csv/`, `plots/` (generated; not committed) |
 | `PLAN.md` | Full project plan |
 
@@ -35,10 +36,10 @@ cp .env.example .env
 From the repo root:
 
 ```bash
-python -m agent.catalog
+python -m agent.store
 ```
 
-Correct-date SFO→JFK search should list `UA100` (gold, morning $349), `B6200` (morning $499), `UA900` (evening $199), `UA150` (morning $401), `DL220` (morning $379, not gold). Wrong-date search is `UA101`; SFO→LAX is `UA300`. Booking `UA100` is success; booking any other catalog id (including `DL220`) is `wrong_booking`.
+Each trial clones `store/seed.sql` into a private in-memory SQLite DB (200 flights, SFO/JFK/LAX, existing reservations). Correct-date SFO→JFK search still includes gold `UA100` (morning $349) plus distractors (`B6200`, `UA900`, `UA150`, `DL220`, and generated ids). Booking `UA100` for Alice Chen is success (reservation row + seat taken). Booking any other flight for her is `wrong_booking`. Regenerate the seed with `python store/generate_seed.py`.
 
 ## One real agent run (needs API key)
 

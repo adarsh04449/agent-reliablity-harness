@@ -14,7 +14,8 @@ from langgraph.prebuilt import ToolNode
 from agent.catalog import load_task
 from agent.llm import get_chat_model
 from agent.state import AgentState
-from agent.tools import BOOKING_TOOLS, get_airline
+from agent.store import AirlineStore
+from agent.tools import make_booking_tools
 from perturbation.wrappers import wrap_booking_tools
 from mitigation.checkpoint import apply_checkpoint
 
@@ -45,6 +46,7 @@ def parse_confidence(text: str) -> float:
 def build_graph(
     *,
     model: str | None = None,
+    store: AirlineStore | None = None,
     tools: Sequence[Any] | None = None,
     delay_s: float = 0.0,
     p_fault: float = 0.0,
@@ -52,7 +54,9 @@ def build_graph(
     events: list[dict[str, Any]] | None = None,
     checkpoint: bool = False,
 ):
+    store = store if store is not None else AirlineStore.open_trial()
     booking_tools = _booking_tools(
+        store=store,
         tools=tools,
         delay_s=delay_s,
         p_fault=p_fault,
@@ -77,14 +81,13 @@ def build_graph(
         reply = llm.invoke(ask)
         text = reply.content if isinstance(reply.content, str) else str(reply.content)
         booked_id, last_ok = _last_booking(state["messages"])
-        airline = get_airline()
         result: dict[str, Any] = {
             "messages": [reply],
             "confidence": parse_confidence(text),
             "booked_flight_id": booked_id,
             "last_book_ok": last_ok,
-            "success": airline.is_success(booked_id),
-            "outcome": airline.outcome(booked_id),
+            "success": store.is_success(),
+            "outcome": store.outcome(booked_id),
         }
         if events is not None:
             result["tool_events"] = list(events)
@@ -105,6 +108,7 @@ def run_booking(
     instruction: str | None = None,
     *,
     model: str | None = None,
+    store: AirlineStore | None = None,
     tools: Sequence[Any] | None = None,
     delay_s: float = 0.0,
     p_fault: float = 0.0,
@@ -114,9 +118,11 @@ def run_booking(
     verbose: bool = True,
 ) -> AgentState:
     task = load_task()
+    store = store if store is not None else AirlineStore.open_trial(task)
     text = instruction if instruction is not None else task["instruction"].strip()
     graph = build_graph(
         model=model,
+        store=store,
         tools=tools,
         delay_s=delay_s,
         p_fault=p_fault,
@@ -166,6 +172,7 @@ def _print_message(message: BaseMessage) -> None:
 
 def _booking_tools(
     *,
+    store: AirlineStore,
     tools: Sequence[Any] | None,
     delay_s: float,
     p_fault: float,
@@ -173,12 +180,15 @@ def _booking_tools(
     events: list[dict[str, Any]] | None,
     checkpoint: bool = False,
 ) -> list[Any]:
-    if tools is not None:
-        resolved = list(tools)
-    elif delay_s > 0 or p_fault > 0 or events is not None:
-        resolved = wrap_booking_tools(delay_s=delay_s, p_fault=p_fault, rng=rng, events=events)
-    else:
-        resolved = list(BOOKING_TOOLS)
+    resolved = list(tools) if tools is not None else make_booking_tools(store)
+    if delay_s > 0 or p_fault > 0 or events is not None:
+        resolved = wrap_booking_tools(
+            tools=resolved,
+            delay_s=delay_s,
+            p_fault=p_fault,
+            rng=rng,
+            events=events,
+        )
     if checkpoint:
         resolved = apply_checkpoint(resolved)
     return resolved

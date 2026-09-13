@@ -92,10 +92,11 @@ def _search_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any
 
 
 def _demo() -> None:
-    from agent.tools import BOOKING_TOOLS
+    from agent.store import AirlineStore
+    from agent.tools import make_booking_tools
 
     store = SearchCheckpoint()
-    tools = apply_checkpoint(BOOKING_TOOLS, store=store)
+    tools = apply_checkpoint(make_booking_tools(AirlineStore.open_trial()), store=store)
     search = next(t for t in tools if t.name == "search_flights")
     book = next(t for t in tools if t.name == "book_flight")
     search.invoke({"origin": "SFO", "destination": "JFK", "date": "2026-10-15"})

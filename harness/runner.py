@@ -10,6 +10,7 @@ from typing import Any
 
 from agent.catalog import load_task
 from agent.graph import run_booking
+from agent.store import AirlineStore
 from harness.config import Condition, HarnessConfig, fault_rng_seed, load_config
 from harness.logging import write_suite
 from perturbation.paraphrase import paraphrase_at
@@ -20,6 +21,7 @@ SEVERITY = {
     "wrong_booking": 1.0,
     "no_booking": 0.25,
     "unknown_flight": 0.25,
+    "sold_out": 0.25,
 }
 
 
@@ -76,17 +78,22 @@ async def run_trial(
     started = time.perf_counter()
     if verbose:
         print(f"\n=== trial {condition} repeat={repeat} checkpoint={mitigation} ===")
-    state = await asyncio.to_thread(
-        run_booking,
-        instruction,
-        model=cfg.model,
-        delay_s=delay_s,
-        p_fault=p_fault,
-        rng=rng,
-        events=events,
-        checkpoint=mitigation,
-        verbose=verbose,
-    )
+    store = AirlineStore.open_trial(task)
+    try:
+        state = await asyncio.to_thread(
+            run_booking,
+            instruction,
+            model=cfg.model,
+            store=store,
+            delay_s=delay_s,
+            p_fault=p_fault,
+            rng=rng,
+            events=events,
+            checkpoint=mitigation,
+            verbose=verbose,
+        )
+    finally:
+        store.close()
     wall_ms = (time.perf_counter() - started) * 1000
     outcome = str(state.get("outcome") or "no_booking")
     return TrialResult(

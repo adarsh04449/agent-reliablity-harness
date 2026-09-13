@@ -9,7 +9,8 @@ from typing import Any
 
 from langchain_core.tools import StructuredTool
 
-from agent.tools import BOOKING_TOOLS
+from agent.store import AirlineStore
+from agent.tools import make_booking_tools
 
 DEFAULT_DELAY_S = 1.0
 DEFAULT_P_FAULT = 0.2
@@ -18,17 +19,19 @@ _FAULT_KINDS = ("timeout", "empty", "malformed")
 
 def wrap_booking_tools(
     *,
+    tools: list[Any] | None = None,
     delay_s: float = 0.0,
     p_fault: float = 0.0,
     rng: random.Random | None = None,
     events: list[dict[str, Any]] | None = None,
 ) -> list[StructuredTool]:
-    """Same tool names/schemas as BOOKING_TOOLS, with optional delay and faults."""
+    """Same tool names/schemas as the bound booking tools, with optional delay and faults."""
     rng = rng or random.Random()
     events = events if events is not None else []
+    base = list(tools) if tools is not None else make_booking_tools(AirlineStore.open_trial())
     return [
         _wrap_one(tool, delay_s=delay_s, p_fault=p_fault, rng=rng, events=events)
-        for tool in BOOKING_TOOLS
+        for tool in base
     ]
 
 
