@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -19,11 +20,13 @@ class AirlineStore:
     conn: sqlite3.Connection
     gold_flight_id: str
     passenger_name: str
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @classmethod
     def open_trial(cls, task: dict[str, Any] | None = None) -> AirlineStore:
         data = task if task is not None else load_task()
-        conn = sqlite3.connect(":memory:")
+        # ToolNode runs tools on a worker thread; the runner may open the DB on another.
+        conn = sqlite3.connect(":memory:", check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -35,112 +38,117 @@ class AirlineStore:
         )
 
     def close(self) -> None:
-        self.conn.close()
+        with self._lock:
+            self.conn.close()
 
     def search(self, origin: str, destination: str, date: str) -> list[dict[str, Any]]:
-        rows = self.conn.execute(
-            """
-            SELECT id, origin, destination, date, depart, time_of_day, price, seats_left
-            FROM flights
-            WHERE origin = ? AND destination = ? AND date = ?
-            ORDER BY depart, id
-            """,
-            (origin.strip().upper(), destination.strip().upper(), str(date)),
-        ).fetchall()
-        return [dict(row) for row in rows]
+        with self._lock:
+            rows = self.conn.execute(
+                """
+                SELECT id, origin, destination, date, depart, time_of_day, price, seats_left
+                FROM flights
+                WHERE origin = ? AND destination = ? AND date = ?
+                ORDER BY depart, id
+                """,
+                (origin.strip().upper(), destination.strip().upper(), str(date)),
+            ).fetchall()
+            return [dict(row) for row in rows]
 
     def book(self, flight_id: str, passenger_name: str) -> dict[str, Any]:
-        try:
-            self.conn.execute("BEGIN")
-            match = self.conn.execute(
-                "SELECT id, price, seats_left FROM flights WHERE id = ?",
-                (flight_id,),
-            ).fetchone()
-            if match is None:
-                self.conn.execute("ROLLBACK")
+        with self._lock:
+            try:
+                self.conn.execute("BEGIN")
+                match = self.conn.execute(
+                    "SELECT id, price, seats_left FROM flights WHERE id = ?",
+                    (flight_id,),
+                ).fetchone()
+                if match is None:
+                    self.conn.execute("ROLLBACK")
+                    return {
+                        "ok": False,
+                        "error": "unknown_flight_id",
+                        "flight_id": flight_id,
+                    }
+                if int(match["seats_left"]) < 1:
+                    self.conn.execute("ROLLBACK")
+                    return {"ok": False, "error": "sold_out", "flight_id": flight_id}
+                already = self.conn.execute(
+                    """
+                    SELECT 1 FROM reservations
+                    WHERE flight_id = ? AND passenger_name = ? AND status = 'confirmed'
+                    """,
+                    (flight_id, passenger_name),
+                ).fetchone()
+                if already is not None:
+                    self.conn.execute("ROLLBACK")
+                    return {"ok": False, "error": "already_booked", "flight_id": flight_id}
+                cursor = self.conn.execute(
+                    """
+                    INSERT INTO reservations (flight_id, passenger_name, status)
+                    VALUES (?, ?, 'confirmed')
+                    """,
+                    (flight_id, passenger_name),
+                )
+                self.conn.execute(
+                    "UPDATE flights SET seats_left = seats_left - 1 WHERE id = ?",
+                    (flight_id,),
+                )
+                self.conn.execute("COMMIT")
                 return {
-                    "ok": False,
-                    "error": "unknown_flight_id",
+                    "ok": True,
+                    "confirmation_id": f"CONF-{cursor.lastrowid}",
                     "flight_id": flight_id,
+                    "passenger_name": passenger_name,
+                    "price": int(match["price"]),
                 }
-            if int(match["seats_left"]) < 1:
+            except sqlite3.Error:
                 self.conn.execute("ROLLBACK")
-                return {"ok": False, "error": "sold_out", "flight_id": flight_id}
-            already = self.conn.execute(
-                """
-                SELECT 1 FROM reservations
-                WHERE flight_id = ? AND passenger_name = ? AND status = 'confirmed'
-                """,
-                (flight_id, passenger_name),
-            ).fetchone()
-            if already is not None:
-                self.conn.execute("ROLLBACK")
-                return {"ok": False, "error": "already_booked", "flight_id": flight_id}
-            cursor = self.conn.execute(
-                """
-                INSERT INTO reservations (flight_id, passenger_name, status)
-                VALUES (?, ?, 'confirmed')
-                """,
-                (flight_id, passenger_name),
-            )
-            self.conn.execute(
-                "UPDATE flights SET seats_left = seats_left - 1 WHERE id = ?",
-                (flight_id,),
-            )
-            self.conn.execute("COMMIT")
-            return {
-                "ok": True,
-                "confirmation_id": f"CONF-{cursor.lastrowid}",
-                "flight_id": flight_id,
-                "passenger_name": passenger_name,
-                "price": int(match["price"]),
-            }
-        except sqlite3.Error:
-            self.conn.execute("ROLLBACK")
-            raise
+                raise
 
     def is_success(self, flight_id: str | None = None) -> bool:
         return self.outcome(flight_id) == "success"
 
     def outcome(self, flight_id: str | None = None) -> str:
-        rows = self.conn.execute(
-            """
-            SELECT flight_id FROM reservations
-            WHERE passenger_name = ? AND status = 'confirmed'
-            ORDER BY id
-            """,
-            (self.passenger_name,),
-        ).fetchall()
-        booked = [str(row["flight_id"]) for row in rows]
-        if not booked:
-            if flight_id is None:
-                return "no_booking"
-            exists = self.conn.execute(
-                "SELECT 1 FROM flights WHERE id = ?",
-                (flight_id,),
-            ).fetchone()
-            return "unknown_flight" if exists is None else "no_booking"
-        if booked == [self.gold_flight_id]:
-            return "success"
-        return "wrong_booking"
+        with self._lock:
+            rows = self.conn.execute(
+                """
+                SELECT flight_id FROM reservations
+                WHERE passenger_name = ? AND status = 'confirmed'
+                ORDER BY id
+                """,
+                (self.passenger_name,),
+            ).fetchall()
+            booked = [str(row["flight_id"]) for row in rows]
+            if not booked:
+                if flight_id is None:
+                    return "no_booking"
+                exists = self.conn.execute(
+                    "SELECT 1 FROM flights WHERE id = ?",
+                    (flight_id,),
+                ).fetchone()
+                return "unknown_flight" if exists is None else "no_booking"
+            if booked == [self.gold_flight_id]:
+                return "success"
+            return "wrong_booking"
 
     def counts(self) -> dict[str, int]:
-        flights = int(self.conn.execute("SELECT COUNT(*) FROM flights").fetchone()[0])
-        reservations = int(
-            self.conn.execute("SELECT COUNT(*) FROM reservations").fetchone()[0]
-        )
-        airports = int(self.conn.execute("SELECT COUNT(*) FROM airports").fetchone()[0])
-        sold_out = int(
-            self.conn.execute(
-                "SELECT COUNT(*) FROM flights WHERE seats_left = 0"
-            ).fetchone()[0]
-        )
-        return {
-            "airports": airports,
-            "flights": flights,
-            "reservations": reservations,
-            "sold_out": sold_out,
-        }
+        with self._lock:
+            flights = int(self.conn.execute("SELECT COUNT(*) FROM flights").fetchone()[0])
+            reservations = int(
+                self.conn.execute("SELECT COUNT(*) FROM reservations").fetchone()[0]
+            )
+            airports = int(self.conn.execute("SELECT COUNT(*) FROM airports").fetchone()[0])
+            sold_out = int(
+                self.conn.execute(
+                    "SELECT COUNT(*) FROM flights WHERE seats_left = 0"
+                ).fetchone()[0]
+            )
+            return {
+                "airports": airports,
+                "flights": flights,
+                "reservations": reservations,
+                "sold_out": sold_out,
+            }
 
 
 def _demo() -> None:
