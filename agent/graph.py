@@ -16,6 +16,7 @@ from agent.llm import get_chat_model
 from agent.state import AgentState
 from agent.tools import BOOKING_TOOLS, get_airline
 from perturbation.wrappers import wrap_booking_tools
+from mitigation.checkpoint import apply_checkpoint
 
 MAX_AGENT_STEPS = 8
 CONFIDENCE_PROMPT = (
@@ -49,9 +50,15 @@ def build_graph(
     p_fault: float = 0.0,
     rng: random.Random | None = None,
     events: list[dict[str, Any]] | None = None,
+    checkpoint: bool = False,
 ):
     booking_tools = _booking_tools(
-        tools=tools, delay_s=delay_s, p_fault=p_fault, rng=rng, events=events
+        tools=tools,
+        delay_s=delay_s,
+        p_fault=p_fault,
+        rng=rng,
+        events=events,
+        checkpoint=checkpoint,
     )
     llm = get_chat_model(model=model)
     llm_with_tools = llm.bind_tools(booking_tools)
@@ -103,6 +110,8 @@ def run_booking(
     p_fault: float = 0.0,
     rng: random.Random | None = None,
     events: list[dict[str, Any]] | None = None,
+    checkpoint: bool = False,
+    verbose: bool = True,
 ) -> AgentState:
     task = load_task()
     text = instruction if instruction is not None else task["instruction"].strip()
@@ -113,18 +122,46 @@ def run_booking(
         p_fault=p_fault,
         rng=rng,
         events=events,
+        checkpoint=checkpoint,
     )
-    return graph.invoke(
-        {
-            "instruction": text,
-            "messages": [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=text),
-            ],
-            "tool_events": events if events is not None else [],
-        },
-        config={"recursion_limit": MAX_AGENT_STEPS * 2 + 4},
-    )
+    payload: AgentState = {
+        "instruction": text,
+        "messages": [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=text),
+        ],
+        "tool_events": events if events is not None else [],
+    }
+    config = {"recursion_limit": MAX_AGENT_STEPS * 2 + 4}
+    if not verbose:
+        return graph.invoke(payload, config=config)
+    final: AgentState | None = None
+    seen = 0
+    for state in graph.stream(payload, config=config, stream_mode="values"):
+        messages = state.get("messages") or []
+        for message in messages[seen:]:
+            _print_message(message)
+        seen = len(messages)
+        final = state
+    assert final is not None
+    return final
+
+
+def _print_message(message: BaseMessage) -> None:
+    if isinstance(message, SystemMessage):
+        return
+    if isinstance(message, HumanMessage):
+        print("USER:", _message_text(message))
+        return
+    if isinstance(message, AIMessage):
+        for call in message.tool_calls or []:
+            print(f"THINK: {call.get('name')}({call.get('args')})")
+        text = _message_text(message)
+        if text:
+            print("THINK:", text)
+        return
+    if isinstance(message, ToolMessage):
+        print(f"TOOL {message.name}:", str(message.content)[:800])
 
 
 def _booking_tools(
@@ -134,12 +171,17 @@ def _booking_tools(
     p_fault: float,
     rng: random.Random | None,
     events: list[dict[str, Any]] | None,
+    checkpoint: bool = False,
 ) -> list[Any]:
     if tools is not None:
-        return list(tools)
-    if delay_s > 0 or p_fault > 0 or events is not None:
-        return wrap_booking_tools(delay_s=delay_s, p_fault=p_fault, rng=rng, events=events)
-    return list(BOOKING_TOOLS)
+        resolved = list(tools)
+    elif delay_s > 0 or p_fault > 0 or events is not None:
+        resolved = wrap_booking_tools(delay_s=delay_s, p_fault=p_fault, rng=rng, events=events)
+    else:
+        resolved = list(BOOKING_TOOLS)
+    if checkpoint:
+        resolved = apply_checkpoint(resolved)
+    return resolved
 
 
 def _route_agent(state: AgentState) -> Literal["tools", "confidence"]:
@@ -167,6 +209,13 @@ def _last_booking(messages: list[BaseMessage]) -> tuple[str | None, bool]:
         booked_id = payload.get("flight_id")
         last_ok = bool(payload.get("ok"))
     return booked_id, last_ok
+
+
+def _message_text(message: BaseMessage) -> str:
+    content = message.content
+    if isinstance(content, str):
+        return content.strip()
+    return str(content).strip()
 
 
 def _as_dict(content: Any) -> dict[str, Any]:

@@ -48,17 +48,21 @@ python -m agent.graph
 
 Prints success, outcome, booked id, and post-run confidence. Uses `gpt-4o-mini` at temperature 0.
 
-## How to run (once the suite exists)
+## How to run
 
-**Real agent (the experiment):**
+Real OpenAI trials (needs `OPENAI_API_KEY`). Default is **baseline only**, `k` from config (2).
 
 ```bash
-python -m experiments.run_suite --k 3
+python -m experiments.run_suite --k 2
 ```
 
-Requires `OPENAI_API_KEY` in `.env`. There is no fake LLM.
+Full matrix (4 conditions × checkpoint on/off):
 
-`run_suite` is not implemented yet.
+```bash
+python -m experiments.run_suite --k 3 --full
+```
+
+Writes JSONL under `results/logs/`, trial CSV under `results/csv/`, reliability table + pass-rate plot under `results/csv/` and `results/plots/`.
 
 ## Four core metrics
 
