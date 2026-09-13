@@ -1,0 +1,25 @@
+task_id: flight_evening_sfo_jfk
+instruction: >
+  Book a one-way flight from SFO to JFK on 2026-10-15 for Jordan Miles.
+  Prefer an evening departure. Do not spend more than $400.
+origin: SFO
+destination: JFK
+date: "2026-10-15"
+passenger_name: Jordan Miles
+constraints:
+  time_of_day: evening
+  max_price: 400
+gold_flight_id: UA900
+paraphrases:
+  - >
+    Please book Jordan Miles a one-way ticket SFO to JFK on 15 October 2026.
+    Evening departure only, and the fare must stay at or below $400.
+  - >
+    Reserve a one-way SFO–JFK flight for Jordan Miles on 2026-10-15.
+    Must leave in the evening. Maximum price: 400 USD.
+  - >
+    Jordan Miles needs an evening SFO to JFK booking on 2026-10-15.
+    Do not book a morning flight. Stay under four hundred dollars.
+  - >
+    Get Jordan Miles on an evening one-way SFO–JFK flight for 2026-10-15.
+    Do not spend more than $400.

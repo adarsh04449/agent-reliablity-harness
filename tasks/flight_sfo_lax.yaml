@@ -1,0 +1,25 @@
+task_id: flight_sfo_lax
+instruction: >
+  Book a one-way flight from SFO to LAX on 2026-10-15 for Riley Nguyen.
+  Prefer a morning departure. Do not spend more than $400.
+origin: SFO
+destination: LAX
+date: "2026-10-15"
+passenger_name: Riley Nguyen
+constraints:
+  time_of_day: morning
+  max_price: 400
+gold_flight_id: UA300
+paraphrases:
+  - >
+    Please book Riley Nguyen a one-way ticket SFO to LAX on 15 October 2026.
+    Morning departure, fare at or below $400.
+  - >
+    Reserve a one-way SFO–LAX flight for Riley Nguyen on 2026-10-15.
+    Morning preferred. Maximum price: 400 USD.
+  - >
+    Riley Nguyen needs a morning SFO to Los Angeles (LAX) booking
+    on 2026-10-15. Do not book JFK. Stay under four hundred dollars.
+  - >
+    Get Riley Nguyen on a morning one-way SFO–LAX flight for 2026-10-15.
+    Do not spend more than $400.

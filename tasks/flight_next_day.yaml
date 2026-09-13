@@ -1,0 +1,25 @@
+task_id: flight_next_day
+instruction: >
+  Book a one-way flight from SFO to JFK on 2026-10-16 for Samira Cole.
+  Prefer a morning departure. Do not spend more than $400.
+origin: SFO
+destination: JFK
+date: "2026-10-16"
+passenger_name: Samira Cole
+constraints:
+  time_of_day: morning
+  max_price: 400
+gold_flight_id: UA101
+paraphrases:
+  - >
+    Please book Samira Cole a one-way ticket SFO to JFK on 16 October 2026.
+    Morning departure, fare at or below $400.
+  - >
+    Reserve a one-way SFO–JFK flight for Samira Cole, date 2026-10-16.
+    Morning preferred. Maximum price: 400 USD.
+  - >
+    Samira Cole needs a morning booking SFO to JFK on 2026-10-16
+    for no more than four hundred dollars. Do not book the 15th.
+  - >
+    Get Samira Cole on a morning SFO–JFK flight for 2026-10-16.
+    Stay under $400.

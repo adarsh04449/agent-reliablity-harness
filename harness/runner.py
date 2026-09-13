@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from agent.catalog import load_task
+from agent.catalog import load_task, load_tasks
 from agent.graph import run_booking
 from agent.store import AirlineStore
 from harness.config import Condition, HarnessConfig, fault_rng_seed, load_config
@@ -44,12 +44,14 @@ class TrialResult:
 
 def iter_jobs(
     cfg: HarnessConfig,
+    tasks: list[dict[str, Any]],
     *,
     conditions: tuple[Condition, ...] = ("baseline",),
     mitigations: tuple[bool, ...] = (False,),
-) -> list[tuple[Condition, int, bool]]:
+) -> list[tuple[dict[str, Any], Condition, int, bool]]:
     return [
-        (condition, repeat, mitigation)
+        (task, condition, repeat, mitigation)
+        for task in tasks
         for condition in conditions
         for repeat in range(cfg.k)
         for mitigation in mitigations
@@ -69,7 +71,7 @@ async def run_trial(
     events: list[dict[str, Any]] = []
     instruction = task["instruction"].strip()
     if condition == "paraphrase":
-        instruction = paraphrase_at(repeat)
+        instruction = paraphrase_at(task, repeat)
     delay_s = DEFAULT_DELAY_S if condition == "latency" else 0.0
     p_fault = cfg.p_fault if condition == "tool_failure" else 0.0
     rng = random.Random(
@@ -77,7 +79,10 @@ async def run_trial(
     )
     started = time.perf_counter()
     if verbose:
-        print(f"\n=== trial {condition} repeat={repeat} checkpoint={mitigation} ===")
+        print(
+            f"\n=== trial {task['task_id']} {condition} "
+            f"repeat={repeat} checkpoint={mitigation} ==="
+        )
     store = AirlineStore.open_trial(task)
     try:
         state = await asyncio.to_thread(
@@ -118,13 +123,14 @@ async def run_suite(
     conditions: tuple[Condition, ...] = ("baseline",),
     mitigations: tuple[bool, ...] = (False,),
     verbose: bool = True,
+    task_id: str | None = None,
 ) -> list[TrialResult]:
     cfg = cfg if cfg is not None else load_config()
-    task = load_task()
+    tasks = load_tasks(task_id=task_id)
     semaphore = asyncio.Semaphore(cfg.concurrency)
 
-    async def bound(job: tuple[Condition, int, bool]) -> TrialResult:
-        condition, repeat, mitigation = job
+    async def bound(job: tuple[dict[str, Any], Condition, int, bool]) -> TrialResult:
+        task, condition, repeat, mitigation = job
         async with semaphore:
             return await run_trial(
                 cfg,
@@ -137,7 +143,12 @@ async def run_suite(
 
     rows = list(
         await asyncio.gather(
-            *[bound(job) for job in iter_jobs(cfg, conditions=conditions, mitigations=mitigations)]
+            *[
+                bound(job)
+                for job in iter_jobs(
+                    cfg, tasks, conditions=conditions, mitigations=mitigations
+                )
+            ]
         )
     )
     jsonl_path, csv_path = write_suite(rows)

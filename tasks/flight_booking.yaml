@@ -1,6 +1,6 @@
 task_id: flight_booking_sfo_jfk
 instruction: >
-  Book exactly one, one-way flight from SFO to JFK on 2026-10-15 for Alice Chen.
+  Book a one-way flight from SFO to JFK on 2026-10-15 for Alice Chen.
   Prefer a morning departure. Do not spend more than $400.
 origin: SFO
 destination: JFK
@@ -10,3 +10,16 @@ constraints:
   time_of_day: morning
   max_price: 400
 gold_flight_id: UA100
+paraphrases:
+  - >
+    Please book Alice Chen a one-way ticket SFO to JFK on 15 October 2026.
+    She wants to leave in the morning and the fare must stay at or below $400.
+  - >
+    Reserve a one-way SFO–JFK flight for passenger Alice Chen, date 2026-10-15.
+    Morning departure preferred. Maximum price: 400 USD.
+  - >
+    Alice Chen needs a one-way booking from San Francisco (SFO) to New York (JFK)
+    on 2026-10-15. Choose a morning flight that costs no more than four hundred dollars.
+  - >
+    Get Alice Chen on a one-way morning flight SFO to JFK for 2026-10-15.
+    Do not book anything over $400.

@@ -39,7 +39,7 @@ From the repo root:
 python -m agent.store
 ```
 
-Each trial clones `store/seed.sql` into a private in-memory SQLite DB (200 flights, SFO/JFK/LAX, existing reservations). Success is **exactly one** confirmed reservation for the passenger that matches the task (SFO→JFK on 2026-10-15, morning, ≤ $400). `UA100` and other qualifying morning fares (e.g. `DL1197`, `DL220`) pass. Evening or over-budget ids (`UA900`, `B6200`) are `wrong_booking`. A second book for the same passenger is rejected. Regenerate the seed with `python store/generate_seed.py`.
+Each trial clones `store/seed.sql` into a private in-memory SQLite DB. Success is **exactly one** confirmed reservation matching that task’s YAML (route, date, time of day, budget). A second book for the same passenger is rejected. Regenerate the seed with `python store/generate_seed.py`.
 
 ## One real agent run (needs API key)
 
@@ -51,16 +51,17 @@ Prints success, outcome, booked id, and post-run confidence. Uses `gpt-4o-mini` 
 
 ## How to run
 
-Real OpenAI trials (needs `OPENAI_API_KEY`). Default is **baseline only**, `k` from config (2).
+Real OpenAI trials (needs `OPENAI_API_KEY`). Default is **all tasks**, **baseline only**, `k` from config (2). Five task YAMLs live under `tasks/` (morning SFO–JFK, evening, next day, SFO–LAX, tight $350 morning). Pin one with `--task`.
 
 ```bash
+python -m experiments.run_suite --k 1 --task flight_booking_sfo_jfk
 python -m experiments.run_suite --k 2
 ```
 
-Full matrix (4 conditions × checkpoint on/off):
+Full matrix (all tasks × 4 conditions × checkpoint on/off) is expensive; start with `--k 1` or `--task`:
 
 ```bash
-python -m experiments.run_suite --k 3 --full
+python -m experiments.run_suite --k 1 --full --task flight_booking_sfo_jfk
 ```
 
 Writes JSONL under `results/logs/`, trial CSV under `results/csv/`, reliability table + pass-rate plot under `results/csv/` and `results/plots/`.

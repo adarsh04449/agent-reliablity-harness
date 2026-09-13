@@ -26,10 +26,10 @@ CONFIDENCE_PROMPT = (
 )
 SYSTEM_PROMPT = (
     "You book one-way flights using two tools: search_flights then book_flight. "
-    "Search first. Pick exactly one flight that matches the passenger constraints "
-    "(morning departure, budget). Call book_flight once with that flight id and "
-    "the passenger name in the request. Do not invent flight ids. "
-    "Do not book more than one flight."
+    "Search first using the origin, destination, and date in the user request. "
+    "Pick exactly one flight that matches those constraints (time of day and budget). "
+    "Call book_flight once with that flight id and the passenger name in the request. "
+    "Do not invent flight ids. Do not book more than one flight."
 )
 _CONFIDENCE_RE = re.compile(r"(?<![\d.])(0(?:\.\d+)?|1(?:\.0+)?)(?![\d.])")
 

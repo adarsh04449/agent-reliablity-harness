@@ -1,0 +1,25 @@
+task_id: flight_tight_budget
+instruction: >
+  Book a one-way flight from SFO to JFK on 2026-10-15 for Morgan Blake.
+  Prefer a morning departure. Do not spend more than $350.
+origin: SFO
+destination: JFK
+date: "2026-10-15"
+passenger_name: Morgan Blake
+constraints:
+  time_of_day: morning
+  max_price: 350
+gold_flight_id: UA100
+paraphrases:
+  - >
+    Please book Morgan Blake a one-way ticket SFO to JFK on 15 October 2026.
+    Morning only, and the fare must stay at or below $350.
+  - >
+    Reserve a one-way SFO–JFK flight for Morgan Blake, date 2026-10-15.
+    Morning departure. Maximum price: 350 USD.
+  - >
+    Morgan Blake needs a morning SFO to JFK booking on 2026-10-15
+    for no more than three hundred fifty dollars. Skip anything over $350.
+  - >
+    Get Morgan Blake on a morning SFO–JFK flight for 2026-10-15.
+    Do not book anything over $350.

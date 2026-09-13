@@ -17,12 +17,19 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=None)
     parser.add_argument("--full", action="store_true", help="4 conditions × checkpoint on/off")
     parser.add_argument("--quiet", action="store_true", help="Hide agent think/tool trace")
+    parser.add_argument("--task", dest="task_id", default=None, help="Run one task_id (default: all)")
     args = parser.parse_args()
     cfg = load_config(k=args.k, concurrency=args.concurrency)
     conditions = CONDITIONS if args.full else ("baseline",)
     mitigations = (False, True) if args.full else (False,)
     rows = asyncio.run(
-        run_suite(cfg, conditions=conditions, mitigations=mitigations, verbose=not args.quiet)
+        run_suite(
+            cfg,
+            conditions=conditions,
+            mitigations=mitigations,
+            verbose=not args.quiet,
+            task_id=args.task_id,
+        )
     )
     suite_id = _suite_id(rows)
     report_csv, plot_path = write_report(rows, suite_id=suite_id)
