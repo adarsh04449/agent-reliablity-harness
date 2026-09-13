@@ -14,7 +14,7 @@ Inspired by [Towards a Science of AI Agent Reliability](https://arxiv.org/abs/26
 | `metrics/` | Consistency, robustness, predictability, bounded severity |
 | `mitigation/` | Checkpoint / rollback |
 | `experiments/` | Suite entrypoint (`run_suite`) |
-| `tasks/` | Task YAML (flight booking goal + gold id) |
+| `tasks/` | Task YAML (route, passenger, constraints) |
 | `store/` | SQLite schema + seed (airports, flights, reservations) |
 | `results/` | `logs/`, `csv/`, `plots/` (generated; not committed) |
 | `PLAN.md` | Full project plan |
@@ -39,7 +39,7 @@ From the repo root:
 python -m agent.store
 ```
 
-Each trial clones `store/seed.sql` into a private in-memory SQLite DB (200 flights, SFO/JFK/LAX, existing reservations). Correct-date SFO→JFK search still includes gold `UA100` (morning $349) plus distractors (`B6200`, `UA900`, `UA150`, `DL220`, and generated ids). Booking `UA100` for Alice Chen is success (reservation row + seat taken). Booking any other flight for her is `wrong_booking`. Regenerate the seed with `python store/generate_seed.py`.
+Each trial clones `store/seed.sql` into a private in-memory SQLite DB (200 flights, SFO/JFK/LAX, existing reservations). Success is **exactly one** confirmed reservation for the passenger that matches the task (SFO→JFK on 2026-10-15, morning, ≤ $400). `UA100` and other qualifying morning fares (e.g. `DL1197`, `DL220`) pass. Evening or over-budget ids (`UA900`, `B6200`) are `wrong_booking`. A second book for the same passenger is rejected. Regenerate the seed with `python store/generate_seed.py`.
 
 ## One real agent run (needs API key)
 

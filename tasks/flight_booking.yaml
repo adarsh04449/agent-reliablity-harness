@@ -1,6 +1,6 @@
 task_id: flight_booking_sfo_jfk
 instruction: >
-  Book a one-way flight from SFO to JFK on 2026-10-15 for Alice Chen.
+  Book exactly one, one-way flight from SFO to JFK on 2026-10-15 for Alice Chen.
   Prefer a morning departure. Do not spend more than $400.
 origin: SFO
 destination: JFK
