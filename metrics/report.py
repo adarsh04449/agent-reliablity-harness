@@ -9,9 +9,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from agent.catalog import REPO_ROOT
-from metrics.consistency import outcome_consistency
-from metrics.predictability import predictability
-from metrics.robustness import robustness
+from metrics.consistency import (
+    outcome_consistency,
+    resource_stability,
+    trajectory_mix,
+    trajectory_order,
+)
+from metrics.predictability import early_failure_auroc, predictability
+from metrics.robustness import robustness, robustness_split
 from metrics.severity import bounded_severity
 from metrics.util import filter_rows, pass_rate
 
@@ -26,13 +31,21 @@ def score_table(rows: list[Any]) -> dict[str, dict[str, float | None]]:
         if not sliced:
             continue
         pred = predictability(sliced)
+        split = robustness_split(rows, mitigation=mitigation)
         key = "checkpoint" if mitigation else "no_checkpoint"
         table[key] = {
             "consistency": outcome_consistency(rows, mitigation=mitigation),
+            "trajectory_mix": trajectory_mix(rows, mitigation=mitigation),
+            "trajectory_order": trajectory_order(rows, mitigation=mitigation),
+            "resource_stability": resource_stability(rows, mitigation=mitigation),
             "robustness": robustness(rows, mitigation=mitigation),
+            "robustness_prompt": split["prompt"],
+            "robustness_latency": split["latency"],
+            "robustness_fault": split["fault"],
             "predictability_brier": pred["brier"],
             "calibration": pred["calibration"],
             "auroc": pred["auroc"],
+            "early_failure_auroc": early_failure_auroc(sliced),
             "bounded_severity": bounded_severity(sliced),
             "pass_rate_baseline": pass_rate(filter_rows(sliced, condition="baseline")),
         }

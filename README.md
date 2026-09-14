@@ -1,23 +1,36 @@
 # Agent Reliability Harness
 
-A testing framework that measures how **consistently** an LLM agent succeeds at multi-step tasks under repeats and perturbations — not whether it can succeed once.
+LLM agents that call tools can change real state: they search, book, and write records. A single successful trace is not evidence that the system is reliable. The same request can fail on a later run, under a paraphrased prompt, or when a tool is slow or returns an error. Unlike a chat hallucination, a bad tool call leaves a durable, incorrect outcome.
 
-Inspired by [Towards a Science of AI Agent Reliability](https://arxiv.org/abs/2602.16666) (Rabanser et al., 2026). This repo is a small harness for a **real OpenAI agent** with simulated airline tools. See [PLAN.md](PLAN.md) for scope, metrics, and stretch work (including τ-bench).
+This repository is a harness for that measurement. A live OpenAI model uses LangGraph against a simulated airline: each trial gets its own SQLite catalog, with search and book as tools. Tasks are YAML booking constraints. A trial passes when the catalog has a confirmed reservation that matches the task. Reliability is measured by repeating each task *K* times on a baseline run, then under paraphrases, added latency, and injected tool failures, with optional checkpoint/retry (`--full`). Scores are listed below.
+
+## Metrics
+
+| Metric | Meaning |
+| --- | --- |
+| Consistency | Stability of pass/fail across identical repeats |
+| Trajectory mix / order | Similarity of tool bags and call order across repeats |
+| Resource stability | Stability of tool-call count across repeats |
+| Robustness | Pass-rate under paraphrase, latency, and tool faults relative to baseline |
+| Predictability | Calibration of post-run confidence vs actual success (Brier) |
+| Early-failure AUROC | Whether a bad first tool call predicts trial failure |
+| Bounded severity | Cost of a failure (e.g. missed search vs wrong booking) |
+
+`--full` compares checkpoint/retry on vs off. The difference is largest under injected `book_flight` failures.
 
 ## Layout
 
 | Path | Role |
 | --- | --- |
-| `agent/` | LangGraph agent, mock booking tools, LLM factory |
-| `perturbation/` | Paraphrases; latency and partial tool-failure wrappers |
-| `harness/` | Config, trial runner, JSONL/CSV logging |
-| `metrics/` | Consistency, robustness, predictability, bounded severity |
-| `mitigation/` | Checkpoint / rollback |
-| `experiments/` | Suite entrypoint (`run_suite`) |
-| `tasks/` | Task YAML (route, passenger, constraints) |
-| `store/` | SQLite schema + seed (airports, flights, reservations) |
-| `results/` | `logs/`, `csv/`, `plots/` (generated; not committed) |
-| `PLAN.md` | Full project plan |
+| `agent/` | LangGraph ReAct agent + airline tools |
+| `store/` | Schema and seed (~200 flights, airports, existing PNR clutter) |
+| `tasks/` | Five booking jobs as YAML |
+| `perturbation/` | Prompt paraphrases; latency and tool-fault wrappers |
+| `mitigation/` | Snapshot search; retry book on failure |
+| `harness/` | Trial runner, JSONL/CSV logs |
+| `metrics/` | Score table + plot |
+| `experiments/` | `python -m experiments.run_suite` |
+| `results/` | `logs/`, `csv/`, `plots/` (generated, not committed) |
 
 ## Setup
 
@@ -27,52 +40,36 @@ Python 3.11+.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-# put OPENAI_API_KEY in .env
+cp .env.example .env   # OPENAI_API_KEY
 ```
 
-## Verify the catalog (no LLM)
-
-From the repo root:
+Catalog only (no LLM):
 
 ```bash
 python -m agent.store
 ```
 
-Each trial clones `store/seed.sql` into a private in-memory SQLite DB. Success is **exactly one** confirmed reservation matching that task’s YAML (route, date, time of day, budget). A second book for the same passenger is rejected. Regenerate the seed with `python store/generate_seed.py`.
-
-## One real agent run (needs API key)
+One live agent turn:
 
 ```bash
 python -m agent.graph
 ```
 
-Prints success, outcome, booked id, and post-run confidence. Uses `gpt-4o-mini` at temperature 0.
+Rebuild the seed with `python store/generate_seed.py`.
 
-## How to run
+## Run the suite
 
-Real OpenAI trials (needs `OPENAI_API_KEY`). Default is **all tasks**, **baseline only**, `k` from config (2). Five task YAMLs live under `tasks/` (morning SFO–JFK, evening, next day, SFO–LAX, tight $350 morning). Pin one with `--task`.
+Default: all five tasks, baseline only, `k` from config.
 
 ```bash
 python -m experiments.run_suite --k 1 --task flight_booking_sfo_jfk
 python -m experiments.run_suite --k 2
 ```
 
-Full matrix (all tasks × 4 conditions × checkpoint on/off) is expensive; start with `--k 1` or `--task`:
+Full matrix (baseline / paraphrase / latency / tool-fault × checkpoint on/off). Start with one task:
 
 ```bash
-python -m experiments.run_suite --k 1 --full --task flight_booking_sfo_jfk
+python -m experiments.run_suite --k 1 --full --task flight_booking_sfo_jfk --quiet
 ```
 
-Writes JSONL under `results/logs/`, trial CSV under `results/csv/`, reliability table + pass-rate plot under `results/csv/` and `results/plots/`.
-
-## Four core metrics
-
-| Metric | Meaning |
-| --- | --- |
-| Consistency | Same task, identical repeats: does pass/fail stay stable? |
-| Robustness | How much pass rate drops under paraphrase / latency / tool faults |
-| Predictability | After the run, “how sure are you?” → Brier (paper-style) |
-| Bounded severity | How badly a failure cascades (e.g. wrong booking vs missed search) |
-
-Checkpoint/rollback is compared on vs off, especially under tool failure. Extra paper metrics and τ-bench are stretch; see PLAN.md.
+`--concurrency N` for parallel trials. Traces → `results/logs/`. Scores → `results/csv/`. Pass-rate plot → `results/plots/`.

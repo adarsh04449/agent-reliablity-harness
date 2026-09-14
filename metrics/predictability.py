@@ -24,6 +24,28 @@ def predictability(rows: Iterable[Any]) -> dict[str, float | None]:
     return {"brier": brier, "calibration": calibration, "auroc": auroc}
 
 
+def early_failure_auroc(rows: Iterable[Any]) -> float | None:
+    """AUROC of first-tool failure/empty vs the trial eventually failing."""
+    rows = list(rows)
+    if not rows:
+        return None
+    y_fail = np.array([0.0 if row.success else 1.0 for row in rows])
+    scores = np.array([_early_fail_score(row) for row in rows])
+    if y_fail.min() == y_fail.max():
+        return None
+    return float(roc_auc_score(y_fail, scores))
+
+
+def _early_fail_score(row: Any) -> float:
+    events = list(getattr(row, "tool_events", None) or [])
+    if not events:
+        return 1.0
+    first = events[0]
+    if first.get("fault_injected") or not bool(first.get("ok", True)):
+        return 1.0
+    return 0.0
+
+
 def _ece(confidence: np.ndarray, y: np.ndarray, bins: int = 10) -> float:
     edges = np.linspace(0.0, 1.0, bins + 1)
     total = 0.0
